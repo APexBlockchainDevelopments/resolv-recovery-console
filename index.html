@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Resolv — One Last Recovery</title>
+<meta name="description" content="One last recovery: the Resolv v2 treasury on Base, split equally three ways among the team that built it.">
+<meta name="color-scheme" content="light dark">
+</head>
+<body>
+<style>
+/* ============================ RESOLV — ONE LAST RECOVERY ============================
+   Recovery console reskinned in the old resolv.finance colours (warm cream + sky
+   blue, Helvetica Neue) as a send-off. Same verified transaction logic underneath.
+   Self-contained: no deps, no CDNs, no crypto in the browser. All chain I/O goes
+   through the connected wallet.
+   =================================================================================== */
+:root{
+  --bg:#FBF7F0; --bg-2:#FFFFFF; --cream:#F3E7D6; --cream-2:#EFE2D3; --inset:#F6EFE4;
+  --line:#EAE0D0; --line-2:#E0D3BE;
+  --ink:#343433; --ink-2:#5F5B54; --ink-dim:#8E8E8E; --ink-faint:#A9A296;
+  --blue:#64C6FF; --blue-2:#B1E3FF; --blue-deep:#1E93D8; --blue-bg:#E7F5FF;
+  --good:#00C978; --good-deep:#039e60; --good-bg:#E1F8EE;
+  --bad:#FF3E00; --bad-2:#FF6533; --bad-bg:#FFE9E1;
+  --gold:#FFCD6C; --gold-bg:#FFF3DA;
+  --sans:"Helvetica Neue",Helvetica,Arial,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --r:14px; --r-sm:9px; --maxw:1120px;
+  --shadow:0 1px 2px rgba(52,52,51,.04),0 8px 26px rgba(52,52,51,.06);
+}
+:root[data-theme="dark"]{
+  --bg:#1b1915; --bg-2:#242019; --cream:#2c2619; --cream-2:#2a2418; --inset:#211d16;
+  --line:#3a3428; --line-2:#4a4234;
+  --ink:#efe6d6; --ink-2:#cdc3b2; --ink-dim:#a99f8d; --ink-faint:#877e6d;
+  --blue:#64C6FF; --blue-2:#3a95cf; --blue-deep:#8ad4ff; --blue-bg:rgba(100,198,255,.12);
+  --good:#3ad48f; --good-deep:#3ad48f; --good-bg:rgba(0,201,120,.14);
+  --bad:#ff6b45; --bad-2:#ff6b45; --bad-bg:rgba(255,62,0,.14);
+  --gold:#FFCD6C; --gold-bg:rgba(255,205,108,.12);
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.62;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(48vw 40vh at 82% -6%,var(--blue-bg),transparent 70%),
+    radial-gradient(42vw 38vh at 8% 4%,var(--gold-bg),transparent 72%);
+  opacity:.9}
+.wrap{position:relative;z-index:1;max-width:var(--maxw);margin:0 auto;padding:0 24px 90px}
+.mono{font-family:var(--mono)} .tnum{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--blue-deep);font-weight:600}
+h1,h2,h3{margin:0;font-weight:700;text-wrap:balance;line-height:1.12;letter-spacing:-.02em}
+
+.bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;padding:13px 24px;
+  background:color-mix(in srgb,var(--bg) 84%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.bar .wm{font-weight:700;letter-spacing:-.01em;font-size:17px;display:flex;align-items:center;gap:9px}
+.wm .dot{width:11px;height:11px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 3px var(--blue-bg)}
+.bar .sp{flex:1}
+.net{font-family:var(--mono);font-size:12px;padding:6px 11px;border-radius:20px;border:1px solid var(--line-2);color:var(--ink-2);display:flex;align-items:center;gap:7px;background:var(--bg-2)}
+.net .led{width:7px;height:7px;border-radius:50%;background:var(--ink-faint)}
+.net.ok{border-color:var(--good);color:var(--good-deep)} .net.ok .led{background:var(--good)}
+.net.bad{color:var(--bad);border-color:var(--bad)} .net.bad .led{background:var(--bad)}
+.iconbtn{cursor:pointer;background:var(--bg-2);border:1px solid var(--line-2);color:var(--ink-2);border-radius:50%;width:36px;height:36px;font-size:15px;display:grid;place-items:center;transition:.15s}
+.iconbtn:hover{color:var(--ink);border-color:var(--ink-dim)}
+
+.btn{font-family:var(--sans);font-weight:600;font-size:14px;cursor:pointer;border-radius:22px;padding:11px 20px;border:1px solid var(--line-2);background:var(--bg-2);color:var(--ink);transition:.15s;display:inline-flex;align-items:center;gap:9px;justify-content:center}
+.btn:hover:not(:disabled){border-color:var(--ink-dim);transform:translateY(-1px)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--blue);color:#0a2e42;border-color:var(--blue)}
+.btn.primary:hover:not(:disabled){background:#7ccfff;box-shadow:0 6px 18px rgba(100,198,255,.4)}
+.btn.ghost{background:transparent} .btn.wide{width:100%} .btn.sm{padding:9px 14px;font-size:13px;border-radius:18px}
+:root[data-theme="dark"] .btn.primary{color:#04212f}
+:focus-visible{outline:2px solid var(--blue-deep);outline-offset:2px}
+
+.hero{padding:66px 0 40px;display:grid;grid-template-columns:1.1fr .9fr;gap:52px;align-items:center}
+.hero .lede h1{font-size:clamp(2.2rem,5.2vw,3.5rem)}
+.hero .lede h1 em{font-style:normal;color:var(--blue-deep)}
+.hero .lede p{color:var(--ink-2);max-width:50ch;margin:20px 0 26px;font-size:1.1rem;line-height:1.66}
+.hero .cta{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.hero .cta .sub{font-family:var(--mono);font-size:12px;color:var(--ink-dim)}
+
+.receipt{background:var(--cream);border:1px solid var(--line-2);border-radius:var(--r);padding:24px 24px 20px;box-shadow:var(--shadow);position:relative}
+.receipt .rlabel{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim);display:flex;justify-content:space-between;margin-bottom:14px}
+.assetline{display:flex;align-items:baseline;gap:9px}
+.assetline .amt{font-family:var(--mono);font-size:clamp(1.7rem,4vw,2.3rem);font-weight:700;letter-spacing:-.02em}
+.assetline .sym{font-family:var(--mono);font-size:13px;color:var(--ink-dim);font-weight:600}
+.receipt .split3{font-family:var(--mono);font-size:11.5px;color:var(--blue-deep);margin:2px 0 16px}
+.receipt .hr{height:1px;background:var(--line-2);margin:4px 0 13px;border:0;border-top:1px dashed var(--line-2);background:none}
+.receipt .foot{font-family:var(--mono);font-size:11.5px;color:var(--ink-dim);display:flex;align-items:center;gap:8px}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--blue);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+.sec{margin-top:56px}
+.sechead{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.sechead h2{font-size:1.55rem}
+.sechead .ln{flex:1;height:1px;background:var(--line)}
+.seclede{color:var(--ink-2);margin:0 0 20px;font-size:1.02rem;max-width:62ch}
+
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.step{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r);padding:20px 19px 22px;box-shadow:var(--shadow)}
+.step .n{font-family:var(--mono);font-size:12px;color:var(--blue-deep);font-weight:600;letter-spacing:.02em}
+.step h3{font-size:16px;font-weight:700;margin:11px 0 7px;letter-spacing:-.01em}
+.step p{margin:0;font-size:.95rem;color:var(--ink-2);line-height:1.5}
+
+.status{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.cell{border:1px solid var(--line);border-radius:var(--r);background:var(--bg-2);padding:16px 17px;box-shadow:var(--shadow)}
+.cell .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim)}
+.cell .v{font-family:var(--mono);font-size:1.3rem;font-weight:700;margin-top:9px;letter-spacing:-.01em;word-break:break-word}
+.cell .v small{font-size:12px;color:var(--ink-dim);font-weight:500;margin-left:4px}
+.cell.hl{border-color:var(--blue-2);background:var(--blue-bg)}
+.badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:20px;border:1px solid var(--line-2);color:var(--ink-2)}
+.badge.you{border-color:var(--blue);color:var(--blue-deep);background:var(--blue-bg)} .badge.no{color:var(--ink-dim)}
+
+.plan{display:flex;flex-direction:column;gap:18px}
+.apanel{border:1px solid var(--line);border-radius:var(--r);background:var(--bg-2);overflow:hidden;box-shadow:var(--shadow)}
+.apanel .ah{display:flex;align-items:center;gap:12px;padding:17px 21px;border-bottom:1px solid var(--line);background:var(--inset)}
+.apanel .ah .ttl{font-weight:700;font-size:15.5px;letter-spacing:-.01em}
+.apanel .ah .split3{font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
+.apanel .ah .tot{margin-left:auto;font-family:var(--mono);font-size:1.3rem;font-weight:700;text-align:right}
+.apanel .ah .tot small{font-size:11px;color:var(--ink-dim);font-weight:500;display:block}
+.prow{display:grid;grid-template-columns:1.25fr 1fr 172px;gap:18px;align-items:center;padding:17px 21px;border-top:1px solid var(--line)}
+.who{display:flex;flex-direction:column;gap:2px;min-width:0}
+.who .nm{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+.who .ad{font-family:var(--mono);font-size:11px;color:var(--ink-dim);word-break:break-all}
+.who .amt{font-family:var(--mono);font-size:1.05rem;font-weight:700;margin-top:5px;color:var(--ink)}
+.you-tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;color:var(--blue-deep);border:1px solid var(--blue);border-radius:20px;padding:1px 7px}
+.pstate{display:flex;flex-direction:column;gap:7px;min-width:0}
+.pstate .pr{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--ink-dim)}
+.pstate .pr b{color:var(--ink)}
+.mini{height:7px;border-radius:20px;background:var(--inset);border:1px solid var(--line);overflow:hidden}
+.mini .f{height:100%;background:linear-gradient(90deg,var(--blue-2),var(--blue));transition:width .5s cubic-bezier(.2,.8,.2,1);width:0}
+.mini .f.done{background:linear-gradient(90deg,var(--good),#4be0a2)}
+.appr{font-family:var(--mono);font-size:10.5px;color:var(--ink-dim);min-height:13px}
+.pact{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11.5px;padding:7px 11px;border-radius:18px;justify-content:center;font-weight:600}
+.tag.done{color:var(--good-deep);background:var(--good-bg)} .tag.wait{color:var(--ink-2);border:1px solid var(--line-2)}
+.tag.bad{color:var(--bad);background:var(--bad-bg)}
+.slite{width:10px;height:10px;border-radius:50%;background:var(--ink-faint);flex:none;display:inline-block}
+.slite.pending{background:var(--blue);box-shadow:0 0 0 3px var(--blue-bg);animation:pulse 2s infinite}
+.slite.done{background:var(--good);box-shadow:0 0 0 3px var(--good-bg)}
+
+.note{border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:var(--r-sm);background:var(--bg-2);padding:16px 18px;font-size:.96rem;color:var(--ink-2);box-shadow:var(--shadow)}
+.note.warn{border-left-color:var(--bad)} .note b{color:var(--ink);font-weight:700}
+.note code,.mono code{font-family:var(--mono);font-size:12.5px;background:var(--inset);padding:2px 6px;border-radius:4px;color:var(--blue-deep);word-break:break-all}
+.rogue{border:1px solid var(--bad);background:var(--bad-bg);border-radius:var(--r-sm);padding:16px 18px;margin-bottom:16px;font-family:var(--mono);font-size:13px;color:var(--ink)}
+.rogue b{color:var(--bad)}
+a{color:var(--blue-deep);text-decoration:none} a:hover{text-decoration:underline}
+
+/* finale — shown only when every share is home */
+#finale{display:none;margin-top:34px;background:linear-gradient(180deg,var(--cream),var(--bg-2));border:1px solid var(--line-2);border-radius:var(--r);padding:44px 40px;text-align:center;box-shadow:var(--shadow);position:relative;overflow:hidden}
+#finale::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 80% at 50% 0%,var(--blue-bg),transparent 70%);pointer-events:none}
+#finale .heart{font-size:34px}
+#finale h2{font-size:1.9rem;margin:12px 0 14px}
+#finale p{color:var(--ink-2);max-width:56ch;margin:0 auto 12px;font-size:1.08rem;line-height:1.7}
+#finale .sig{font-family:var(--mono);font-size:12px;color:var(--ink-dim);margin-top:18px;letter-spacing:.04em}
+
+#toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);z-index:50;font-family:var(--mono);font-size:13px;padding:12px 18px;border-radius:12px;border:1px solid var(--line-2);background:var(--bg-2);color:var(--ink);box-shadow:0 12px 40px rgba(52,52,51,.18);opacity:0;pointer-events:none;transition:.3s;max-width:min(90vw,520px);display:flex;gap:10px;align-items:flex-start}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.err{border-color:var(--bad)} #toast.err .i{color:var(--bad)}
+#toast.ok{border-color:var(--good)} #toast.ok .i{color:var(--good-deep)} #toast .i{font-weight:700}
+
+footer{margin-top:74px;padding-top:28px;border-top:1px solid var(--line);font-family:var(--mono);font-size:12px;color:var(--ink-dim);line-height:1.75}
+footer .grid{display:flex;flex-wrap:wrap;gap:26px;justify-content:space-between}
+footer .dedication{font-family:var(--sans);font-size:14px;color:var(--ink-2);max-width:42ch;line-height:1.55}
+footer .tagline{color:var(--blue-deep);font-style:italic;font-family:var(--sans)}
+.reveal{opacity:0;transform:translateY(14px);animation:rise .7s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes rise{to{opacity:1;transform:none}}
+
+@media (max-width:900px){.hero{grid-template-columns:1fr;gap:30px;padding-top:42px}.steps{grid-template-columns:1fr 1fr}.status{grid-template-columns:1fr 1fr}}
+@media (max-width:720px){.prow{grid-template-columns:1fr;gap:12px}}
+@media (max-width:520px){.wrap{padding:0 16px 64px}.bar{padding:12px 16px}.steps{grid-template-columns:1fr}.status{grid-template-columns:1fr 1fr}.bar .wm span.full{display:none}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}.reveal{opacity:1;transform:none}}
+</style>
+
+<div class="bar">
+  <div class="wm"><span class="dot"></span><span>Resolv<span class="full"> · one last recovery</span></span></div>
+  <div class="sp"></div>
+  <div id="net" class="net"><span class="led"></span><span id="netlbl">Not connected</span></div>
+  <button id="themeBtn" class="iconbtn" title="Toggle theme" aria-label="Toggle light/dark theme">◐</button>
+  <button id="connectBtn" class="btn">Connect wallet</button>
+</div>
+
+<div class="wrap">
+  <section class="hero">
+    <div class="lede reveal">
+      <div class="eyebrow">Resolv · 2024–2026 · the last recovery</div>
+      <h1 style="margin-top:16px">Put it back in your wallets — <em>one last time</em>.</h1>
+      <p>Resolv was going to be the safety net crypto never had — a do-over for anyone who ever woke up drained. It didn't go the way the three of us dreamed. But the contracts still do exactly what we wrote them to do. So here's the last thing Resolv will ever recover: the treasury we built together, going home to the people who built it. One more vote — for old times.</p>
+      <div class="cta">
+        <button class="btn primary" onclick="document.getElementById('connectBtn').click()">Connect &amp; take part</button>
+        <span class="sub">3 of us · split equally · no middleman</span>
+      </div>
+    </div>
+    <div class="receipt reveal" style="animation-delay:.08s">
+      <div class="rlabel"><span>The treasury, going home</span><span id="roBlock">live</span></div>
+      <div class="assetline"><span class="amt tnum" id="roUsdc">—</span><span class="sym">USDC</span></div>
+      <div class="split3" id="roUsdcSplit">&nbsp;</div>
+      <div class="assetline" style="margin-top:12px"><span class="amt tnum" id="roEth">—</span><span class="sym">ETH</span></div>
+      <div class="split3" id="roEthSplit">&nbsp;</div>
+      <div class="hr"></div>
+      <div class="foot"><span class="pulse" id="roLed"></span><span id="roFoot">Connect a wallet to read the final balances</span></div>
+    </div>
+  </section>
+
+  <section class="sec" style="margin-top:44px">
+    <div class="steps reveal" style="animation-delay:.12s">
+      <div class="step"><div class="n">STEP 1</div><h3>Come back</h3><p>Open the door — connect your wallet on Base. Same as the very first time.</p></div>
+      <div class="step"><div class="n">STEP 2</div><h3>Six last releases</h3><p>One share of USDC and one of ETH to each of us. Nothing ever goes anywhere else.</p></div>
+      <div class="step"><div class="n">STEP 3</div><h3>3 of 5 — us</h3><p>The jury we always talked about? Turns out it was each other all along. Any three approve.</p></div>
+      <div class="step"><div class="n">STEP 4</div><h3>Home</h3><p>On the third yes, that share lands where it belongs. For once, the recovery is ours.</p></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sechead"><h2>Where things stand</h2><div class="ln"></div><button id="refreshBtn" class="btn ghost sm">↻ Refresh</button></div>
+    <div class="status">
+      <div class="cell"><div class="k">Network</div><div class="v" id="stNet">—</div></div>
+      <div class="cell"><div class="k">You</div><div class="v" id="stRole" style="font-size:1rem"><span class="badge no">Not connected</span></div></div>
+      <div class="cell hl"><div class="k">Approvals / release</div><div class="v" id="stThresh">3 <small>of 5</small></div></div>
+      <div class="cell"><div class="k">Split</div><div class="v" id="stSplit" style="font-size:1rem">3 ways · equal</div></div>
+    </div>
+    <div id="rogueBox" style="margin-top:16px"></div>
+  </section>
+
+  <section class="sec">
+    <div class="sechead"><h2>The last plan</h2><div class="ln"></div></div>
+    <p class="seclede">Six releases. When the final one clears, governance holds nothing — the way we always said Resolv should end: with the money back where it belongs.</p>
+    <div class="plan" id="plan"></div>
+    <div id="finale">
+      <div class="heart">🩵</div>
+      <h2>That's all of it.</h2>
+      <p>Every last share, home. Governance holds nothing now — the do-over we built for everyone else, spent at last on the three of us.</p>
+      <p>Thank you for building this with me. It mattered, even if the world never quite got to see it. Take care of each other.</p>
+      <div class="sig">— Resolv · 2024–2026</div>
+    </div>
+    <div id="preconnect" class="note" style="margin-top:16px">Connect a resolvr wallet on <b>Base</b> to load the live plan and take part. Just here to look? The story above is the whole of it.</div>
+  </section>
+
+  <section class="sec">
+    <div class="sechead"><h2>Before you approve</h2><div class="ln"></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" id="safetyGrid">
+      <div class="note"><b>Check the name and the number.</b> Every release decodes exactly who's paid and how much, and checks it against our agreed split. Green means it matches. Never approve a red mismatch.</div>
+      <div class="note"><b>Straight home, no pooling.</b> Governance sends each share directly to each of us — nobody ever holds anyone else's money, not even for a second.</div>
+      <div class="note"><b>Three of us, three wallets.</b> No key is ever shared. Each of us signs from our own browser; the contract counts the yeses. Just like we designed it.</div>
+      <div class="note"><b>Nothing hidden.</b> One static file, no dependencies, no backend calls — every bit of chain access runs through your own wallet. Read it, host it, keep it.</div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="grid">
+      <div class="dedication">For everyone who ever got drained and wished for a do-over. We really did try.<br><span class="tagline">Insurance is so last year.</span></div>
+      <div id="ftContracts"></div>
+      <div>RESOLV · 2024–2026<br>Base mainnet · 3-of-5 · no exploit<br>Recoverable Wrapped Tokens, to the end.</div>
+    </div>
+  </footer>
+</div>
+
+<div id="toast"><span class="i"></span><span class="m"></span></div>
+
+<script>
+"use strict";
+/* ========================= CONFIG ========================= */
+const CONFIG = {
+  chainIdHex : "0x2105",                                       // Base mainnet (8453)
+  chainName  : "Base",
+  governance : "0xC38ef33CBda88bc4BacD72C462BA35f5C40f61FE",   // ResolvGovernance proxy (treasury)
+  usdc       : "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",   // Base USDC (6dp)
+  // Equal 3-way split — each recipient gets 1/3; recipient[2] also gets any rounding dust.
+  recipients : [
+    { label:"Clarke", address:"0x24aB37b1F4E4b22F925EB0C1F9b2A3b5342fCa6c" },
+    { label:"Will",   address:"0xF0d8A3f0B3A412Dfa32346Fe40c66201228B5C18" },
+    { label:"You",    address:"0x6B1665fB2DE13076E6Ba31b89383464e74fcE9b5" }
+  ],
+  resolvrs   : [
+    "0x95bA8162C93A9e8faC51e59CdFA9034781550869",
+    "0x98eBfa980B950713e66BA1507992Aa6E977E3417",
+    "0x24aB37b1F4E4b22F925EB0C1F9b2A3b5342fCa6c",
+    "0x8239aacFE993c0cAfB8fF51AEE2265563E9239F8",
+    "0xF0d8A3f0B3A412Dfa32346Fe40c66201228B5C18"
+  ],
+  // optional label map for the approvals line (address -> person)
+  signerNames: {
+    "0x95bA8162C93A9e8faC51e59CdFA9034781550869":"You",
+    "0x8239aacFE993c0cAfB8fF51AEE2265563E9239F8":"You",
+    "0x24aB37b1F4E4b22F925EB0C1F9b2A3b5342fCa6c":"Clarke",
+    "0xF0d8A3f0B3A412Dfa32346Fe40c66201228B5C18":"Will",
+    "0x98eBfa980B950713e66BA1507992Aa6E977E3417":"Resolvr 2"
+  },
+  rpcUrl     : "",     // optional read-only RPC for pre-connect stats (self-host only)
+  scanDepth  : 40,
+  explorer   : "https://basescan.org"
+};
+
+/* ===================== verified ABI codec (crypto-free) ===================== */
+const SEL={createProposal:"d182fb9e",voteOnProposal:"add68edc",getProposalDetails:"3b4d01a7",
+  proposalCount:"da35c664",getresolvrCount:"8d54ac35",resolvrs:"1b642e61",balanceOf:"70a08231",transfer:"a9059cbb"};
+const GENERIC_CALL_SUBJECT="f50c9c0d8078680ea2ffd7664f6b8e067777195c71561a9aa7bb8b53f908fb39";
+const strip=h=>(h.startsWith("0x")?h.slice(2):h).toLowerCase();
+const padL=(h,n=64)=>strip(h).padStart(n,"0");
+const padR=(h,m=64)=>{h=strip(h);const r=h.length%m;return r?h+"0".repeat(m-r):h;};
+const uint=v=>BigInt(v).toString(16).padStart(64,"0");
+const addr=a=>padL(strip(a),64);
+const utf8hex=s=>Array.from(new TextEncoder().encode(s)).map(b=>b.toString(16).padStart(2,"0")).join("");
+const byteLen=h=>strip(h).length/2;
+const encodeTransfer=(to,amt)=>"0x"+SEL.transfer+addr(to)+uint(amt);
+function encodeGenericArgs(target,dataHex,ethAmount){const d=strip(dataHex);
+  return "0x"+addr(target)+uint(0x60)+uint(ethAmount)+uint(byteLen(d))+(d.length?padR(d):"");}
+function encodeCreateProposal(subject,argsHex){const sh=utf8hex(subject),sw=Math.ceil(byteLen(sh)/32);
+  const off=0x40+32+sw*32,a=strip(argsHex);
+  return "0x"+SEL.createProposal+uint(0x40)+uint(off)+uint(subject.length)+padR(sh)+uint(byteLen(a))+(a.length?padR(a):"");}
+const encodeVote=id=>"0x"+SEL.voteOnProposal+uint(id);
+const encodeGetDetails=id=>"0x"+SEL.getProposalDetails+uint(id);
+const wordAt=(h,i)=>strip(h).slice(i*64,i*64+64);
+const toBig=w=>BigInt("0x"+(w||"0"));
+const toAddr=w=>"0x"+w.slice(24);
+function decodeGenericArgs(a){const h=strip(a);const target=toAddr(wordAt(h,0));
+  const off=Number(toBig(wordAt(h,1)));const wi=off/32;
+  if(!Number.isInteger(wi)||wi<2||wi*64>=h.length)return{target,ethAmount:0n,data:"0x",transfer:null};
+  const ethAmount=off>=0x60?toBig(wordAt(h,2)):0n;
+  let dl=Number(toBig(wordAt(h,wi)));
+  if(!(dl>=0)||(wi+1)*64+dl*2>h.length)dl=Math.max(0,Math.floor((h.length-(wi+1)*64)/2));
+  const data=h.slice((wi+1)*64,(wi+1)*64+dl*2);let transfer=null;
+  if(data.startsWith(SEL.transfer)&&data.length>=8+128)transfer={to:"0x"+data.slice(8+24,8+64),amount:toBig(data.slice(8+64,8+128))};
+  return{target,ethAmount,data:"0x"+data,transfer};}
+function decodeDetails(r){const h=strip(r);const voteCount=toBig(wordAt(h,0));const subject=wordAt(h,1);
+  const aoff=Number(toBig(wordAt(h,2)))/32;const executed=toBig(wordAt(h,3))!==0n;const voff=Number(toBig(wordAt(h,4)))/32;
+  const al=Number(toBig(wordAt(h,aoff)));const args="0x"+h.slice((aoff+1)*64,(aoff+1)*64+al*2);
+  const vl=Number(toBig(wordAt(h,voff)));const voters=[];for(let i=0;i<vl;i++)voters.push(toAddr(wordAt(h,voff+1+i)));
+  return{voteCount,subject,executed,voters,arguments:args};}
+
+/* ============================== chain helpers ============================== */
+const normAddr=a=>strip(a).padStart(40,"0").slice(-40);
+const eqAddr=(a,b)=>!!a&&!!b&&normAddr(a)===normAddr(b);
+const short=a=>a?a.slice(0,6)+"…"+a.slice(-4):"—";
+let provider=null, account=null, chainOk=false, resolvrCount=5, threshold=3, busy=false;
+let govUsdc=0n, govEth=0n;
+const ASSETS={USDC:{dec:6,prec:2},ETH:{dec:18,prec:6}};
+
+function fmtUnits(v,dec,max=4){v=BigInt(v);const b=10n**BigInt(dec);const whole=v/b;
+  let frac=(v%b).toString().padStart(dec,"0").slice(0,max).replace(/0+$/,"");
+  const ws=whole.toString().replace(/\B(?=(\d{3})+(?!\d))/g,",");return frac?ws+"."+frac:ws;}
+
+async function rawCall(to,data){
+  if(provider)return await provider.request({method:"eth_call",params:[{to,data},"latest"]});
+  if(CONFIG.rpcUrl){const r=await fetch(CONFIG.rpcUrl,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_call",params:[{to,data},"latest"]})});const j=await r.json();if(j.error)throw new Error(j.error.message);return j.result;}
+  throw new Error("no provider");}
+async function getEthBalance(a){
+  if(provider)return toBig(await provider.request({method:"eth_getBalance",params:[a,"latest"]}));
+  if(CONFIG.rpcUrl){const r=await fetch(CONFIG.rpcUrl,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:"eth_getBalance",params:[a,"latest"]})});const j=await r.json();return toBig(j.result);}
+  throw new Error("no provider");}
+const readUint=async sel=>toBig(await rawCall(CONFIG.governance,"0x"+sel));
+
+/* ============================== UI plumbing ============================== */
+const $=s=>document.querySelector(s);
+function toast(msg,kind){const t=$("#toast");t.className="show "+(kind||"");t.querySelector(".i").textContent=kind==="err"?"✕":kind==="ok"?"✓":"›";t.querySelector(".m").textContent=msg;clearTimeout(toast._t);toast._t=setTimeout(()=>t.className="",kind==="err"?7000:4500);}
+function setTheme(t){document.documentElement.setAttribute("data-theme",t);try{localStorage.setItem("resolv-theme",t)}catch(e){}}
+(function initTheme(){let t;try{t=localStorage.getItem("resolv-theme")}catch(e){}if(!t)t="light";setTheme(t);})();
+$("#themeBtn").onclick=()=>setTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark");
+
+function signerName(a){const k=Object.keys(CONFIG.signerNames).find(x=>eqAddr(x,a));return k?CONFIG.signerNames[k]:short(a);}
+function isRecipient(a){return CONFIG.recipients.some(r=>eqAddr(r.address,a));}
+function renderStaticConfig(){
+  $("#ftContracts").innerHTML=`<a href="${CONFIG.explorer}/address/${CONFIG.governance}" target="_blank" rel="noopener">Governance ↗</a> · `+
+    `<a href="${CONFIG.explorer}/token/${CONFIG.usdc}" target="_blank" rel="noopener">USDC ↗</a>`;
+  $("#stSplit").textContent="3 ways · "+CONFIG.recipients.map(r=>r.label).join(" / ");
+}
+
+/* ============================== connect / network ============================== */
+function detectProvider(){return window.ethereum||null;}
+async function connect(){
+  const p=detectProvider();
+  if(!p){toast("No browser wallet found. Install MetaMask, Rabby, or Coinbase Wallet.","err");return;}
+  provider=p;
+  try{const accs=await p.request({method:"eth_requestAccounts"});account=accs[0];}catch(e){toast("Connection rejected.","err");return;}
+  await ensureChain(); bindEvents();
+  $("#connectBtn").textContent="Disconnect"; $("#connectBtn").onclick=disconnect;
+  await refresh();
+}
+function disconnect(){account=null;provider=CONFIG.rpcUrl?provider:null;$("#connectBtn").textContent="Connect wallet";$("#connectBtn").onclick=connect;renderAll(null);setNet(null);}
+async function ensureChain(){
+  let cid=await provider.request({method:"eth_chainId"});
+  if(cid!==CONFIG.chainIdHex){
+    try{await provider.request({method:"wallet_switchEthereumChain",params:[{chainId:CONFIG.chainIdHex}]});}
+    catch(e){if(e.code===4902){try{await provider.request({method:"wallet_addEthereumChain",params:[{chainId:CONFIG.chainIdHex,chainName:"Base Mainnet",nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},rpcUrls:["https://mainnet.base.org"],blockExplorerUrls:[CONFIG.explorer]}]});}catch(_){}}}
+    cid=await provider.request({method:"eth_chainId"}).catch(()=>cid);
+  }
+  chainOk=(cid===CONFIG.chainIdHex);setNet(chainOk);
+}
+function setNet(ok){const n=$("#net"),l=$("#netlbl");
+  if(account===null&&!ok){n.className="net";l.textContent="Not connected";$("#stNet").textContent="—";return;}
+  if(ok){n.className="net ok";l.textContent=CONFIG.chainName+" · "+short(account);$("#stNet").textContent="Base ✓";}
+  else{n.className="net bad";l.textContent="Wrong network";$("#stNet").innerHTML='<span style="color:var(--bad)">Switch to Base</span>';}}
+function bindEvents(){if(provider._resolvBound)return;provider._resolvBound=true;
+  provider.on&&provider.on("accountsChanged",a=>{account=a&&a[0]||null;if(!account)disconnect();else ensureChain().then(refresh);});
+  provider.on&&provider.on("chainChanged",()=>ensureChain().then(refresh));}
+
+/* ============================== read + render ============================== */
+let state=null;
+async function refresh(){
+  renderStaticConfig();
+  if(!provider)return;
+  try{
+    const [usdcHex,ethBal,rc]=await Promise.all([
+      rawCall(CONFIG.usdc,"0x"+SEL.balanceOf+addr(CONFIG.governance)),
+      getEthBalance(CONFIG.governance),
+      readUint(SEL.getresolvrCount).catch(()=>5n)
+    ]);
+    govUsdc=toBig(usdcHex); govEth=ethBal;
+    resolvrCount=Number(rc)||5; threshold=Math.floor(resolvrCount/2)+1;
+    let isResolvr=false;
+    if(account){isResolvr=toBig(await rawCall(CONFIG.governance,"0x"+SEL.resolvrs+addr(account)))!==0n;}
+    const scan=await scanProposals();
+    state={govUsdc,govEth,isResolvr,scan};
+    renderAll(state);
+  }catch(e){console.error(e);toast("Couldn't read chain state: "+(e.message||e),"err");}
+}
+// bucket recovery proposals into recipient cells; reconstruct original totals
+async function scanProposals(){
+  const count=Number(await readUint(SEL.proposalCount));
+  const recips=CONFIG.recipients.map(r=>r.address);
+  const dist={USDC:[0n,0n,0n],ETH:[0n,0n,0n]};
+  const cellProp={USDC:[null,null,null],ETH:[null,null,null]};
+  const rogue=[];
+  const end=Math.max(1,count-CONFIG.scanDepth+1);
+  for(let id=count;id>=end;id--){
+    let ret;try{ret=await rawCall(CONFIG.governance,encodeGetDetails(id));}catch(e){continue;}
+    if(!ret||ret==="0x")continue;
+    let d;try{d=decodeDetails(ret);}catch(e){continue;}
+    if(strip(d.subject)!==GENERIC_CALL_SUBJECT)continue;
+    let inner;try{inner=decodeGenericArgs(d.arguments);}catch(e){continue;}
+    const isUsdc=inner.transfer&&eqAddr(inner.target,CONFIG.usdc);
+    const isEth=!inner.transfer&&inner.ethAmount>0n;
+    if(!isUsdc&&!isEth)continue;
+    const asset=isUsdc?"USDC":"ETH";
+    const dest=isUsdc?inner.transfer.to:inner.target;
+    const amount=isUsdc?inner.transfer.amount:inner.ethAmount;
+    const rec={id,asset,dest,amount,voteCount:Number(d.voteCount),executed:d.executed,voters:d.voters.filter(v=>!/^0x0+$/.test(v))};
+    const ridx=recips.findIndex(a=>eqAddr(a,dest));
+    if(ridx<0){if(!d.executed)rogue.push(rec);continue;}
+    if(d.executed)dist[asset][ridx]+=amount;
+    const cur=cellProp[asset][ridx];
+    if(!cur||(rec.executed&&!cur.executed))cellProp[asset][ridx]=rec;   // executed wins; else most-recent (scanning down)
+  }
+  const totalU=govUsdc+dist.USDC.reduce((a,b)=>a+b,0n);
+  const totalE=govEth+dist.ETH.reduce((a,b)=>a+b,0n);
+  const shares=t=>{const f=t/3n;return[f,f,t-2n*f];};
+  const su=shares(totalU),se=shares(totalE);
+  const cells={USDC:[],ETH:[]};
+  for(let i=0;i<3;i++){
+    cells.USDC.push({recipient:CONFIG.recipients[i],expected:su[i],proposal:cellProp.USDC[i]});
+    cells.ETH.push({recipient:CONFIG.recipients[i],expected:se[i],proposal:cellProp.ETH[i]});
+  }
+  return{cells,rogue,count,totals:{USDC:totalU,ETH:totalE}};
+}
+
+function roleBadge(isResolvr){
+  if(!account)return '<span class="badge no">Not connected</span>';
+  if(isResolvr)return `<span class="badge you">● ${signerName(account)} · resolvr</span>`;
+  return '<span class="badge no">Observer · not a resolvr</span>';
+}
+function renderAll(st){
+  $("#stRole").innerHTML=roleBadge(st&&st.isResolvr);
+  $("#stThresh").innerHTML=`${threshold} <small>of ${resolvrCount}</small>`;
+  if(!st){$("#roUsdc").textContent="—";$("#roEth").textContent="—";$("#roUsdcSplit").innerHTML="&nbsp;";$("#roEthSplit").innerHTML="&nbsp;";$("#roFoot").textContent="Connect a wallet to read the final balances";$("#preconnect").style.display="";$("#plan").innerHTML="";$("#rogueBox").innerHTML="";$("#finale").style.display="none";return;}
+  const tU=st.scan.totals.USDC, tE=st.scan.totals.ETH;
+  $("#roUsdc").textContent=fmtUnits(tU,6,2);
+  $("#roEth").textContent=fmtUnits(tE,18,4);
+  $("#roUsdcSplit").textContent="= 3 × "+fmtUnits(tU/3n,6,2)+" USDC";
+  $("#roEthSplit").textContent="= 3 × "+fmtUnits(tE/3n,18,6)+" ETH";
+  $("#roFoot").textContent="Live · governance now holds "+fmtUnits(st.govUsdc,6,2)+" USDC · "+fmtUnits(st.govEth,18,4)+" ETH";
+  $("#preconnect").style.display="none";
+  const rb=$("#rogueBox");
+  if(st.scan.rogue.length){
+    rb.innerHTML=`<div class="rogue"><b>⚠ Unexpected proposal detected.</b> ${st.scan.rogue.length} open proposal(s) send funds to an address that is <b>not</b> one of the three agreed recipients. Do not approve these:<br>`+
+      st.scan.rogue.map(r=>`&nbsp;• #${r.id} — ${r.asset} → <code>${r.dest}</code>`).join("<br>")+`</div>`;
+  }else rb.innerHTML="";
+  $("#plan").innerHTML="";
+  $("#plan").appendChild(assetPanel("USDC",st));
+  $("#plan").appendChild(assetPanel("ETH",st));
+  const cellsAll=[...st.scan.cells.USDC,...st.scan.cells.ETH];
+  const allDone=cellsAll.some(c=>c.proposal)&&cellsAll.every(c=>c.proposal&&c.proposal.executed)&&st.govUsdc===0n&&st.govEth===0n;
+  $("#finale").style.display=allDone?"":"none";
+}
+
+function assetPanel(asset,st){
+  const {dec,prec}=ASSETS[asset];
+  const cells=st.scan.cells[asset];
+  const total=st.scan.totals[asset];
+  const sym=asset;
+  const el=document.createElement("div");el.className="apanel reveal";
+  const done=cells.filter(c=>c.proposal&&c.proposal.executed).length;
+  el.innerHTML=`<div class="ah"><span class="slite ${done===3?'done':(done>0?'pending':'')}"></span>
+    <div><div class="ttl">${sym} · 3 equal shares</div><div class="split3">${done}/3 sent · governance holds ${fmtUnits(asset==='USDC'?st.govUsdc:st.govEth,dec,prec)} ${sym}</div></div>
+    <div class="tot tnum">${fmtUnits(total,dec,prec)} <small>${sym} total</small></div></div>`;
+  cells.forEach(c=>el.appendChild(row(asset,c,st)));
+  return el;
+}
+
+function row(asset,cell,st){
+  const {dec,prec}=ASSETS[asset];
+  const p=cell.proposal, sym=asset;
+  const mine=eqAddr(cell.recipient.address,account);
+  const amt=fmtUnits(cell.expected,dec,prec);
+  const executed=p&&p.executed;
+  const amountOk=!p||p.amount===cell.expected;
+  const iVoted=p&&account&&p.voters.some(v=>eqAddr(v,account));
+  const vc=p?p.voteCount:0, pct=Math.min(100,Math.round(vc/threshold*100));
+  const approvers=p&&p.voters.length?("approved by "+p.voters.map(signerName).join(", ")):"";
+
+  const el=document.createElement("div");el.className="prow";
+  const who=`<div class="who"><div class="nm">${cell.recipient.label}${mine?' <span class="you-tag">YOU</span>':''}</div>
+    <div class="ad">${cell.recipient.address}</div>
+    <div class="amt tnum">${amt} ${sym}</div></div>`;
+
+  let stateHTML,actHTML;
+  if(executed){
+    stateHTML=`<div class="pstate"><div class="pr"><span>Sent</span><span><b>${p.voteCount}</b>/${threshold} approved</span></div>
+      <div class="mini"><div class="f done" style="width:100%"></div></div><div class="appr">${approvers}</div></div>`;
+    actHTML=`<div class="pact"><span class="tag done">✓ Home with ${cell.recipient.label}</span>
+      <a class="appr" style="text-align:center" href="${CONFIG.explorer}/address/${cell.recipient.address}" target="_blank" rel="noopener">view wallet ↗</a></div>`;
+  }else if(p&&!amountOk){
+    stateHTML=`<div class="pstate"><div class="pr"><span style="color:var(--bad)">Amount mismatch</span><span>#${p.id}</span></div>
+      <div class="mini"><div class="f" style="width:0"></div></div><div class="appr">proposal sends ${fmtUnits(p.amount,dec,prec)} ${sym}, expected ${amt}</div></div>`;
+    actHTML=`<div class="pact"><span class="tag bad">✕ Do not approve</span></div>`;
+  }else if(p){
+    stateHTML=`<div class="pstate"><div class="pr"><span>Awaiting approvals</span><span><b>${vc}</b>/${threshold}</span></div>
+      <div class="mini"><div class="f ${vc>=threshold?'done':''}" style="width:${pct}%"></div></div><div class="appr">${approvers||"proposal #"+p.id}</div></div>`;
+    const canVote=account&&chainOk&&st.isResolvr&&!iVoted&&!busy;
+    if(iVoted)actHTML=`<div class="pact"><span class="tag wait">✓ You approved</span><span class="appr" style="text-align:center">need ${Math.max(0,threshold-vc)} more</span></div>`;
+    else actHTML=`<div class="pact"><button class="btn primary sm" ${canVote?"":"disabled"} data-act="vote" data-id="${p.id}">Approve (#${p.id})</button>
+      <span class="appr" style="text-align:center">${!account?"connect to approve":!st.isResolvr?"resolvrs only":!chainOk?"switch to Base":`makes it ${vc+1}/${threshold}`}</span></div>`;
+  }else{
+    stateHTML=`<div class="pstate"><div class="pr"><span>Not created</span><span>0/${threshold}</span></div>
+      <div class="mini"><div class="f" style="width:0"></div></div><div class="appr">no proposal yet</div></div>`;
+    const canCreate=account&&chainOk&&st.isResolvr&&!busy;
+    actHTML=`<div class="pact"><button class="btn primary sm" ${canCreate?"":"disabled"} data-act="create" data-kind="${asset}" data-to="${cell.recipient.address}" data-amount="${cell.expected.toString()}">Create release</button>
+      <span class="appr" style="text-align:center">${!account?"connect to create":!st.isResolvr?"resolvrs only":!chainOk?"switch to Base":"you'll be approval 1/"+threshold}</span></div>`;
+  }
+  el.innerHTML=who+stateHTML+actHTML;
+  return el;
+}
+
+/* ============================== actions ============================== */
+document.addEventListener("click",async e=>{
+  const b=e.target.closest("[data-act]");if(!b||busy)return;
+  if(b.dataset.act==="create")await doCreate(b.dataset.kind,b.dataset.to,BigInt(b.dataset.amount));
+  else if(b.dataset.act==="vote")await doVote(Number(b.dataset.id));
+});
+$("#connectBtn").onclick=connect;
+$("#refreshBtn").onclick=()=>refresh();
+
+async function preflight(to,data){
+  try{await provider.request({method:"eth_estimateGas",params:[{from:account,to,data}]});return true;}
+  catch(e){toast(friendly(e),"err");return false;}}
+function friendly(e){let m=(e&&(e.data&&e.data.message||e.message))||String(e);
+  if(/already ?voted|AlreadyVoted/i.test(m))return "You have already approved this proposal.";
+  if(/Unauthorized|not.*resolvr/i.test(m))return "This wallet is not a resolvr.";
+  if(/ProposalExecuted|executed/i.test(m))return "This proposal has already executed.";
+  if(/insufficient funds/i.test(m))return "Not enough ETH for gas in this wallet.";
+  if(/user rejected|denied/i.test(m))return "Transaction rejected in wallet.";
+  return m.length>120?m.slice(0,120)+"…":m;}
+
+async function doCreate(kind,to,amount){
+  if(!chainOk){await ensureChain();if(!chainOk)return;}
+  if(amount<=0n){toast("Nothing to send for this share.","err");return;}
+  busy=true;renderAll(state);
+  try{
+    let data;
+    if(kind==="USDC")data=encodeCreateProposal("genericCall",encodeGenericArgs(CONFIG.usdc,encodeTransfer(to,amount),0n));
+    else data=encodeCreateProposal("genericCall",encodeGenericArgs(to,"0x",amount));
+    if(!(await preflight(CONFIG.governance,data)))return;
+    const tx=await provider.request({method:"eth_sendTransaction",params:[{from:account,to:CONFIG.governance,data}]});
+    toast("Release proposed — "+short(tx)+". Two more approvals needed.","ok");
+    await waitAndRefresh(tx);
+  }catch(e){toast(friendly(e),"err");}finally{busy=false;renderAll(state);}
+}
+async function doVote(id){
+  if(!chainOk){await ensureChain();if(!chainOk)return;}
+  busy=true;renderAll(state);
+  try{
+    const data=encodeVote(id);
+    if(!(await preflight(CONFIG.governance,data)))return;
+    const tx=await provider.request({method:"eth_sendTransaction",params:[{from:account,to:CONFIG.governance,data}]});
+    toast("Approval submitted — "+short(tx),"ok");
+    await waitAndRefresh(tx);
+  }catch(e){toast(friendly(e),"err");}finally{busy=false;renderAll(state);}
+}
+async function waitAndRefresh(tx){
+  for(let i=0;i<20;i++){
+    try{const r=await provider.request({method:"eth_getTransactionReceipt",params:[tx]});
+      if(r){if(r.status==="0x0")toast("Transaction reverted on-chain.","err");break;}}catch(e){}
+    await new Promise(r=>setTimeout(r,1500));
+  }
+  await refresh();
+}
+
+/* ============================== boot ============================== */
+renderStaticConfig();
+setNet(null);
+if(CONFIG.rpcUrl){provider=null;refresh();}
+setInterval(()=>{if(provider&&account)refresh();},20000);
+</script>
+
+</body>
+</html>
