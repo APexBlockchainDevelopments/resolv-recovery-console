@@ -313,7 +313,7 @@ function encodeCreateProposal(subject,argsHex){const sh=utf8hex(subject),sw=Math
 const encodeVote=id=>"0x"+SEL.voteOnProposal+uint(id);
 const encodeGetDetails=id=>"0x"+SEL.getProposalDetails+uint(id);
 const wordAt=(h,i)=>strip(h).slice(i*64,i*64+64);
-const toBig=w=>BigInt("0x"+(w||"0"));
+const toBig=w=>{w=((w==null?"":w)+"").replace(/^0x/i,"");return BigInt("0x"+(w||"0"));};
 const toAddr=w=>"0x"+w.slice(24);
 function decodeGenericArgs(a){const h=strip(a);const target=toAddr(wordAt(h,0));
   const off=Number(toBig(wordAt(h,1)));const wi=off/32;
